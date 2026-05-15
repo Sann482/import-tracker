@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% block topbar_title %}Угода #{{ a.agreement_number }}{% endblock %}
+{% block topbar_actions %}
+  <a href="/agreement/{{ a.id }}/edit" class="btn btn-ghost btn-sm">✎ Редагувати</a>
+  {% if a.status == 'active' %}
+  <form method="post" action="/agreement/{{ a.id }}/archive" style="display:inline;">
+    <button type="submit" class="btn btn-success btn-sm" onclick="return confirm('В архів?')">📦 Архів</button>
+  </form>
+  {% endif %}
+{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div style="display:flex;align-items:center;gap:12px;">
+    <a href="/" style="color:var(--muted);text-decoration:none;font-size:20px;">←</a>
+    <div>
+      <div class="page-title" style="display:flex;align-items:center;gap:10px;">
+        Угода #{{ a.agreement_number }}
+        {% if a.status == 'archived' %}
+          <span class="badge badge-gray">Архів</span>
+        {% elif days_until_eta is not none and days_until_eta < 0 %}
+          <span class="badge badge-red">Прострочено</span>
+        {% elif days_until_eta is not none and days_until_eta <= 7 %}
+          <span class="badge badge-yellow">Прибуває незабаром</span>
+        {% else %}
+          <span class="badge badge-blue">В дорозі</span>
+        {% endif %}
+        {% if a.docs_received %}<span class="badge badge-green">Документи ✓</span>{% endif %}
+      </div>
+      {% if a.record_number %}<div class="page-subtitle">Запис: {{ a.record_number }}</div>{% endif %}
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;">
+    <a href="/agreement/{{ a.id }}/edit" class="btn btn-ghost">✎ Редагувати</a>
+    {% if a.status == 'active' %}
+      <form method="post" action="/agreement/{{ a.id }}/archive" style="display:inline;">
+        <button type="submit" class="btn btn-success" onclick="return confirm('Відправити в архів?')">📦 В архів</button>
+      </form>
+    {% else %}
+      <form method="post" action="/agreement/{{ a.id }}/restore" style="display:inline;">
+        <button type="submit" class="btn btn-ghost">↩ Відновити</button>
+      </form>
+    {% endif %}
+    <form method="post" action="/agreement/{{ a.id }}/delete" style="display:inline;">
+      <button type="submit" class="btn btn-danger" onclick="return confirm('Видалити угоду назавжди?')">✕ Видалити</button>
+    </form>
+  </div>
+</div>
+
+<!-- Stats row -->
+<div class="grid grid-4" style="gap:12px;margin-bottom:20px;">
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;">
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">ETA</div>
+    <div style="font-family:var(--mono);font-size:18px;font-weight:500;">{{ a.eta or '—' }}</div>
+    {% if days_until_eta is not none %}
+      <div style="font-size:12px;margin-top:4px;
+        color:{% if days_until_eta < 0 %}var(--red){% elif days_until_eta <= 7 %}var(--yellow){% else %}var(--accent){% endif %};">
+        {% if days_until_eta < 0 %}{{ days_until_eta|abs }} дн. тому
+        {% elif days_until_eta == 0 %}сьогодні
+        {% else %}за {{ days_until_eta }} дн.{% endif %}
+      </div>
+    {% endif %}
+  </div>
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;">
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Доставка загалом</div>
+    <div style="font-family:var(--mono);font-size:18px;font-weight:500;">${{ "%.0f"|format(total_cost) }}</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:4px;">Фрах + Наземка</div>
+  </div>
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;">
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Оплачено</div>
+    <div style="font-family:var(--mono);font-size:18px;font-weight:500;color:var(--ok);">${{ "%.0f"|format(paid) }}</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:4px;">{{ a.payment_percent|int if a.payment_percent else 0 }}%</div>
+  </div>
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;">
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Залишок до оплати</div>
+    <div style="font-family:var(--mono);font-size:18px;font-weight:500;color:{% if remaining > 0 %}var(--red){% else %}var(--green){% endif %};">
+      ${{ "%.0f"|format(remaining) }}
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-top:4px;">
+      {% if remaining <= 0 %}Повністю оплачено{% else %}До сплати{% endif %}
+    </div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+
+  <!-- Left -->
+  <div style="display:flex;flex-direction:column;gap:16px;">
+
+    <div class="card">
+      <div class="card-header"><span style="font-size:13px;font-weight:600;">Деталі угоди</span></div>
+      <div class="card-body">
+        <table style="width:100%;font-size:13px;border-collapse:collapse;">
+          {% macro row(label, val) %}
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:9px 0;color:var(--muted);width:40%;">{{ label }}</td>
+            <td style="padding:9px 0;color:var(--text);">{{ val or '—' }}</td>
+          </tr>
+          {% endmacro %}
+          {{ row('Постачальник', a.supplier) }}
+          {{ row('Контейнери', a.container_count) }}
+          {{ row('Умови', a.delivery_terms) }}
+          {{ row('Лінія', a.shipping_line) }}
+          {{ row('Номер контейнера', a.container_numbers) }}
+          <tr><td style="padding:9px 0;color:var(--muted);">Документи</td>
+          <td style="padding:9px 0;">
+            {% if a.docs_received %}<span class="badge badge-green">Отримано ✓</span>
+            {% else %}<span class="badge badge-gray">Не отримано</span>{% endif %}
+          </td></tr>
+          {% if a.notes %}{{ row('Примітки', a.notes) }}{% endif %}
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span style="font-size:13px;font-weight:600;">Маршрут</span></div>
+      <div class="card-body">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="text-align:center;">
+            <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">POL (завантаження)</div>
+            <div style="font-weight:500;">{{ a.pol or '—' }}</div>
+            {% if a.etd %}<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:3px;">ETD: {{ a.etd }}</div>{% endif %}
+          </div>
+          <div style="flex:1;text-align:center;color:var(--muted);">
+            <div style="border-top:1px dashed var(--border);position:relative;margin:10px 0;">
+              <span style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:var(--bg2);padding:0 8px;font-size:12px;">→</span>
+            </div>
+            {% if a.shipping_line %}<div style="font-size:11px;color:var(--muted);">{{ a.shipping_line }}</div>{% endif %}
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">POD (прибуття)</div>
+            <div style="font-weight:500;">{{ a.pod or '—' }}</div>
+            {% if a.eta %}<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:3px;">ETA: {{ a.eta }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Right: Goods + Finance -->
+  <div style="display:flex;flex-direction:column;gap:16px;">
+
+    <div class="card">
+      <div class="card-header">
+        <span style="font-size:13px;font-weight:600;">Товари</span>
+        {% if goods_total > 0 %}
+          <span style="font-family:var(--mono);font-size:13px;color:var(--ok);">Сума: ${{ "%.0f"|format(goods_total) }}</span>
+        {% endif %}
+      </div>
+      {% if goods %}
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead><tr style="border-bottom:1px solid var(--border);">
+            <th style="padding:8px 16px;text-align:left;color:var(--muted);font-weight:500;font-size:11px;text-transform:uppercase;">Товар</th>
+            <th style="padding:8px 12px;text-align:right;color:var(--muted);font-weight:500;font-size:11px;text-transform:uppercase;">К-сть</th>
+            <th style="padding:8px 12px;text-align:right;color:var(--muted);font-weight:500;font-size:11px;text-transform:uppercase;">Ціна $</th>
+            <th style="padding:8px 16px;text-align:right;color:var(--muted);font-weight:500;font-size:11px;text-transform:uppercase;">Сума $</th>
+          </tr></thead>
+          <tbody>
+          {% for g in goods %}
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:11px 16px;color:var(--text);">{{ g.name }}</td>
+            <td style="padding:11px 12px;text-align:right;font-family:var(--mono);color:var(--text);">{{ g.quantity|int if g.quantity == g.quantity|int else g.quantity }} {{ g.unit }}</td>
+            <td style="padding:11px 12px;text-align:right;font-family:var(--mono);color:var(--muted);">${{ "%.2f"|format(g.price_usd) }}</td>
+            <td style="padding:11px 16px;text-align:right;font-family:var(--mono);color:var(--text);">
+              {% if g.quantity and g.price_usd %}${{ "%.0f"|format(g.quantity * g.price_usd) }}{% else %}—{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <div class="card-body" style="text-align:center;color:var(--muted);padding:30px;">Товари не додано</div>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span style="font-size:13px;font-weight:600;">Фінанси доставки</span></div>
+      <div class="card-body">
+        <table style="width:100%;font-size:13px;border-collapse:collapse;">
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:9px 0;color:var(--muted);">Фрах</td>
+            <td style="padding:9px 0;text-align:right;font-family:var(--mono);">${{ "%.0f"|format(a.freight_usd or 0) }}</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:9px 0;color:var(--muted);">Наземка</td>
+            <td style="padding:9px 0;text-align:right;font-family:var(--mono);">${{ "%.0f"|format(a.inland_usd or 0) }}</td>
+          </tr>
+          <tr style="border-bottom:2px solid var(--border);">
+            <td style="padding:9px 0;font-weight:600;">Разом</td>
+            <td style="padding:9px 0;text-align:right;font-family:var(--mono);font-weight:600;">${{ "%.0f"|format(total_cost) }}</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:9px 0;color:var(--ok);">Оплачено ({{ a.payment_percent|int if a.payment_percent else 0 }}%)</td>
+            <td style="padding:9px 0;text-align:right;font-family:var(--mono);color:var(--ok);">${{ "%.0f"|format(paid) }}</td>
+          </tr>
+          <tr>
+            <td style="padding:9px 0;color:{% if remaining > 0 %}var(--red){% else %}var(--green){% endif %};">
+              {% if remaining <= 0 %}Повністю оплачено{% else %}Залишок{% endif %}
+            </td>
+            <td style="padding:9px 0;text-align:right;font-family:var(--mono);color:{% if remaining > 0 %}var(--red){% else %}var(--green){% endif %};">
+              ${{ "%.0f"|format(remaining) }}
+            </td>
+          </tr>
+        </table>
+        <!-- Payment progress bar -->
+        {% if total_cost > 0 %}
+        <div style="margin-top:12px;">
+          <div style="height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;">
+            <div style="height:6px;border-radius:3px;width:{{ [a.payment_percent or 0, 100]|min }}%;
+              background:{% if (a.payment_percent or 0) >= 100 %}var(--green){% elif (a.payment_percent or 0) >= 50 %}var(--yellow){% else %}var(--red){% endif %};
+              transition:width 0.3s;"></div>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
