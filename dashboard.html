@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+{% block topbar_title %}Дашборд{% endblock %}
+{% block topbar_actions %}
+  <button class="btn btn-ghost btn-sm" onclick="openDashSettings()">⚙ Налаштувати</button>
+  <a href="/agreement/new" class="btn btn-primary btn-sm">+ Нова угода</a>
+{% endblock %}
+
+{% block content %}
+<style>
+.widget{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;position:relative;}
+.widget-drag{cursor:grab;user-select:none;}
+.widget-drag:active{cursor:grabbing;}
+.widget-handle{position:absolute;top:10px;right:10px;color:var(--hint);font-size:16px;cursor:grab;opacity:0.5;display:none;}
+.edit-mode .widget-handle{display:block;}
+.edit-mode .widget{outline:2px dashed var(--border2);}
+.widget-header{padding:13px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.widget-body{padding:16px;}
+.stat-value{font-size:28px;font-weight:500;line-height:1;margin:8px 0 4px;}
+.stat-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:500;}
+.stat-sub{font-size:12px;color:var(--hint);}
+.dash-grid{display:grid;gap:14px;}
+
+/* Settings panel */
+.dash-panel{position:fixed;top:0;right:0;width:280px;height:100vh;background:var(--bg2);border-left:1px solid var(--border);z-index:300;display:none;flex-direction:column;box-shadow:-4px 0 20px rgba(0,0,0,0.08);}
+.dash-panel.open{display:flex;}
+.dash-overlay{position:fixed;inset:0;z-index:299;display:none;}
+.dash-overlay.open{display:block;}
+.dp-header{padding:15px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.dp-body{flex:1;overflow-y:auto;padding:14px 16px;}
+.dp-section{margin-bottom:18px;}
+.dp-title{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:500;margin-bottom:8px;}
+.widget-toggle{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:5px;font-size:13px;cursor:pointer;}
+.widget-toggle:hover{background:var(--bg3);}
+.toggle-sw{width:32px;height:18px;border-radius:9px;background:var(--border2);position:relative;transition:background .2s;flex-shrink:0;}
+.toggle-sw.on{background:var(--text);}
+.toggle-sw::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .2s;}
+.toggle-sw.on::after{transform:translateX(14px);}
+</style>
+
+<!-- Dashboard grid (rendered from saved config) -->
+<div id="dash-grid" class="dash-grid" style="grid-template-columns:repeat(4,1fr);">
+</div>
+
+<!-- Settings Panel -->
+<div class="dash-overlay" id="dash-overlay" onclick="closeDashSettings()"></div>
+<div class="dash-panel" id="dash-panel">
+  <div class="dp-header">
+    <span style="font-size:13px;font-weight:500;">Налаштування дашборду</span>
+    <button onclick="closeDashSettings()" class="btn btn-ghost btn-sm">✕</button>
+  </div>
+  <div class="dp-body">
+    <div class="dp-section">
+      <div class="dp-title">Віджети</div>
+      <div id="widget-toggles"></div>
+    </div>
+    <div class="dp-section">
+      <div class="dp-title">Колонки сітки</div>
+      <div style="display:flex;gap:6px;">
+        {% for n in [2,3,4] %}
+        <button class="btn btn-ghost btn-sm" onclick="setCols({{ n }})" id="col-btn-{{ n }}">{{ n }}</button>
+        {% endfor %}
+      </div>
+    </div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:12px;" onclick="saveDash()">💾 Зберегти</button>
+    <button class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:6px;" onclick="resetDash()">Скинути</button>
+  </div>
+</div>
+
+<script>
+// All data from server
+const DATA = {
+  total:    {{ total }},
+  archived: {{ archived }},
+  overdue:  {{ overdue }},
+  soon:     {{ soon }},
+  delivery_total:   {{ "%.0f"|format(delivery_total) }},
+  goods_total_all:  {{ "%.0f"|format(goods_total_all) }},
+  goods_unpaid:     {{ "%.0f"|format(goods_unpaid) }},
+  recent:   {{ recent | tojson }},
+  suppliers:{{ suppliers | tojson }},
+};
+
+// Widget definitions
+const WIDGETS = {
+  stat_active: {
+    label: 'Активні угоди', cols: 1,
+    render: () => `<div class="widget-body">
+      <div class="stat-label">Активних угод</div>
+      <div class="stat-value">${DATA.total}</div>
+      <div class="stat-sub">всього в роботі</div>
+    </div>`
+  },
+  stat_overdue: {
+    label: 'Прострочені', cols: 1,
+    render: () => `<div class="widget-body" style="border-left:3px solid ${DATA.overdue>0?'var(--danger)':'var(--border)'}">
+      <div class="stat-label">Прострочено</div>
+      <div class="stat-value" style="color:${DATA.overdue>0?'var(--danger)':'var(--text)'}">${DATA.overdue}</div>
+      <div class="stat-sub">ETA минула</div>
+    </div>`
+  },
+  stat_soon: {
+    label: 'Прибуває скоро', cols: 1,
+    render: () => `<div class="widget-body" style="border-left:3px solid ${DATA.soon>0?'var(--warn)':'var(--border)'}">
+      <div class="stat-label">Скоро прибуває</div>
+      <div class="stat-value" style="color:${DATA.soon>0?'var(--warn)':'var(--text)'}">${DATA.soon}</div>
+      <div class="stat-sub">в межах 7 днів</div>
+    </div>`
+  },
+  stat_archived: {
+    label: 'В архіві', cols: 1,
+    render: () => `<div class="widget-body">
+      <div class="stat-label">В архіві</div>
+      <div class="stat-value">${DATA.archived}</div>
+      <div class="stat-sub">завершено</div>
+    </div>`
+  },
+  stat_delivery: {
+    label: 'Вартість доставки', cols: 1,
+    render: () => `<div class="widget-body">
+      <div class="stat-label">Вартість доставки</div>
+      <div class="stat-value">$${Number(DATA.delivery_total).toLocaleString()}</div>
+      <div class="stat-sub">фрах + наземка (активні)</div>
+    </div>`
+  },
+  stat_goods: {
+    label: 'Сума товарів', cols: 1,
+    render: () => `<div class="widget-body">
+      <div class="stat-label">Сума товарів</div>
+      <div class="stat-value">$${Number(DATA.goods_total_all).toLocaleString()}</div>
+      <div class="stat-sub">по активних угодах</div>
+    </div>`
+  },
+  stat_unpaid: {
+    label: 'Не оплачено', cols: 1,
+    render: () => `<div class="widget-body" style="border-left:3px solid ${DATA.goods_unpaid>0?'var(--danger)':'var(--ok)'}">
+      <div class="stat-label">Не оплачено</div>
+      <div class="stat-value" style="color:${DATA.goods_unpaid>0?'var(--danger)':'var(--ok)'}">$${Number(DATA.goods_unpaid).toLocaleString()}</div>
+      <div class="stat-sub">${DATA.goods_unpaid<=0?'всі оплачено':'залишок товарів'}</div>
+    </div>`
+  },
+  recent: {
+    label: 'Останні угоди', cols: 2,
+    render: () => {
+      const rows = DATA.recent.map(a => {
+        const eta = a.eta || '—';
+        const status = a.status==='archived'?'<span class="badge badge-gray">Архів</span>':'<span class="badge badge-blue">В дорозі</span>';
+        return `<tr style="border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''">
+          <td style="padding:9px 14px;"><a href="/agreement/${a.id}" style="color:var(--text);text-decoration:none;font-weight:500;">#${a.agreement_number||'—'}</a></td>
+          <td style="padding:9px 12px;color:var(--muted);font-size:12px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${(a.supplier||'').substring(0,30)}</td>
+          <td style="padding:9px 12px;text-align:center;font-size:12px;color:var(--muted);">${eta}</td>
+          <td style="padding:9px 14px;text-align:center;">${status}</td>
+        </tr>`;
+      }).join('');
+      return `<div class="widget-header"><span style="font-size:13px;font-weight:500;">Останні угоди</span><a href="/?status=active" style="font-size:12px;color:var(--muted);text-decoration:none;">всі →</a></div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead><tr style="border-bottom:1px solid var(--border);background:var(--bg3);">
+          <th style="padding:8px 14px;text-align:left;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;">Угода</th>
+          <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;">Постачальник</th>
+          <th style="padding:8px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;">ETA</th>
+          <th style="padding:8px 14px;text-align:center;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;">Статус</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+    }
+  },
+  suppliers: {
+    label: 'Постачальники', cols: 1,
+    render: () => {
+      if (!DATA.suppliers.length) return '<div class="widget-body" style="color:var(--hint);font-size:13px;">Немає даних</div>';
+      const max = DATA.suppliers[0].cnt;
+      const rows = DATA.suppliers.map(s => `
+        <div style="margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+            <span style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px;">${(s.supplier||'Невідомо').substring(0,30)}</span>
+            <span style="font-size:11px;color:var(--muted);flex-shrink:0;margin-left:6px;">${s.cnt}</span>
+          </div>
+          <div style="height:3px;background:var(--bg3);border-radius:2px;"><div style="height:3px;background:var(--muted);border-radius:2px;width:${Math.round(s.cnt/max*100)}%;opacity:.5;"></div></div>
+        </div>`).join('');
+      return `<div class="widget-header"><span style="font-size:13px;font-weight:500;">Постачальники</span></div>
+        <div class="widget-body">${rows}</div>`;
+    }
+  },
+  quick_actions: {
+    label: 'Швидкі дії', cols: 1,
+    render: () => `<div class="widget-header"><span style="font-size:13px;font-weight:500;">Швидкі дії</span></div>
+      <div class="widget-body" style="display:flex;flex-direction:column;gap:6px;">
+        <a href="/agreement/new" class="btn" style="justify-content:flex-start;">+ Нова угода</a>
+        <a href="/?status=active" class="btn btn-ghost" style="justify-content:flex-start;">Активні угоди</a>
+        <a href="/?status=archived" class="btn btn-ghost" style="justify-content:flex-start;">Архів</a>
+        <a href="/settings" class="btn btn-ghost" style="justify-content:flex-start;">⚙ Налаштування</a>
+      </div>`
+  },
+};
+
+// Config management
+const DEFAULT_CONFIG = {
+  cols: 4,
+  widgets: ['stat_active','stat_overdue','stat_soon','stat_archived','stat_delivery','stat_goods','stat_unpaid','recent','suppliers','quick_actions'],
+  hidden: []
+};
+
+let config = {...DEFAULT_CONFIG};
+
+function loadConfig() {
+  try {
+    const saved = localStorage.getItem('dash_config');
+    if (saved) config = {...DEFAULT_CONFIG, ...JSON.parse(saved)};
+  } catch(e) {}
+}
+
+function saveConfig() {
+  localStorage.setItem('dash_config', JSON.stringify(config));
+}
+
+function renderDash() {
+  const grid = document.getElementById('dash-grid');
+  grid.style.gridTemplateColumns = `repeat(${config.cols},1fr)`;
+  grid.innerHTML = '';
+
+  const visible = config.widgets.filter(id => !config.hidden.includes(id));
+  visible.forEach(id => {
+    const w = WIDGETS[id];
+    if (!w) return;
+    const div = document.createElement('div');
+    div.className = 'widget';
+    div.dataset.id = id;
+    const span = w.cols > 1 ? Math.min(w.cols, config.cols) : 1;
+    div.style.gridColumn = span > 1 ? `span ${span}` : '';
+    div.innerHTML = w.render();
+    grid.appendChild(div);
+  });
+
+  // Update col buttons
+  [2,3,4].forEach(n => {
+    const btn = document.getElementById('col-btn-'+n);
+    if (btn) btn.style.fontWeight = config.cols===n ? '600' : '400';
+  });
+}
+
+function renderToggles() {
+  const container = document.getElementById('widget-toggles');
+  container.innerHTML = Object.entries(WIDGETS).map(([id, w]) => {
+    const on = !config.hidden.includes(id);
+    return `<div class="widget-toggle" onclick="toggleWidget('${id}')">
+      <span>${w.label}</span>
+      <div class="toggle-sw ${on?'on':''}" id="sw-${id}"></div>
+    </div>`;
+  }).join('');
+}
+
+function toggleWidget(id) {
+  const idx = config.hidden.indexOf(id);
+  if (idx >= 0) config.hidden.splice(idx, 1);
+  else config.hidden.push(id);
+  const sw = document.getElementById('sw-'+id);
+  sw.classList.toggle('on', !config.hidden.includes(id));
+  renderDash();
+}
+
+function setCols(n) {
+  config.cols = n;
+  renderDash();
+  [2,3,4].forEach(x => { const b = document.getElementById('col-btn-'+x); if(b) b.style.fontWeight = config.cols===x?'600':'400'; });
+}
+
+function openDashSettings()  { renderToggles(); document.getElementById('dash-panel').classList.add('open'); document.getElementById('dash-overlay').classList.add('open'); }
+function closeDashSettings() { document.getElementById('dash-panel').classList.remove('open'); document.getElementById('dash-overlay').classList.remove('open'); }
+function saveDash()  { saveConfig(); closeDashSettings(); }
+function resetDash() { config = {...DEFAULT_CONFIG}; saveConfig(); renderDash(); renderToggles(); }
+
+loadConfig();
+renderDash();
+</script>
+{% endblock %}

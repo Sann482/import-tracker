@@ -1,0 +1,337 @@
+{% macro combo_field(name, value, options) %}
+{% set cat = name.replace('[]','') %}
+<div style="display:flex;gap:6px;">
+  <select name="{{ name }}" style="flex:1;" onchange="handleSelect(this,'{{ cat }}')">
+    <option value="">— оберіть або введіть нижче —</option>
+    {% for opt in options %}
+    <option value="{{ opt }}" {{ 'selected' if value and value.strip()==opt }}>{{ opt }}</option>
+    {% endfor %}
+    {% if value and value not in options and value.strip() %}
+    <option value="{{ value }}" selected>{{ value }}</option>
+    {% endif %}
+    <option value="__add__">+ Додати до списку...</option>
+  </select>
+</div>
+
+{% endmacro %}
+
+{% extends "base.html" %}
+{% block topbar_title %}{{ 'Редагувати угоду' if agreement else 'Нова угода' }}{% endblock %}
+{% block topbar_actions %}<a href="/" class="btn btn-ghost btn-sm">← Назад</a>{% endblock %}
+{% block content %}
+
+<form method="post" id="main-form" autocomplete="off" onsubmit="prepareSubmit()">
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start;">
+
+  <!-- LEFT -->
+  <div style="display:flex;flex-direction:column;gap:14px;">
+
+    <div class="card">
+      <div class="card-header"><span style="font-size:13px;font-weight:500;">Основна інформація</span></div>
+      <div class="card-body">
+        <div class="grid grid-2" style="gap:10px;">
+          <div class="form-group">
+            <label>Номер угоди</label>
+            <input type="text" name="agreement_number" value="{{ agreement.agreement_number if agreement else '' }}" placeholder="2982">
+          </div>
+          <div class="form-group">
+            <label>Номер запису</label>
+            <input type="text" name="record_number" value="{{ agreement.record_number if agreement else '' }}" placeholder="м10">
+          </div>
+        </div>
+        <div class="grid grid-2" style="gap:10px;">
+          <div class="form-group">
+            <label>Кількість контейнерів</label>
+            {{ combo_field('container_count', agreement.container_count if agreement else '', opts.container_count) }}
+          </div>
+          <div class="form-group">
+            <label>Умови доставки</label>
+            <select name="delivery_terms">
+              <option value="">— оберіть —</option>
+              {% for t in ['FOB','CIF','EXW','DAP','CFR'] %}
+                <option value="{{ t }}" {{ 'selected' if agreement and agreement.delivery_terms and agreement.delivery_terms.strip()==t }}>{{ t }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Постачальник</label>
+          {{ combo_field('supplier', agreement.supplier if agreement else '', opts.supplier) }}
+        </div>
+        <div class="form-group">
+          <label>Номер(и) контейнера</label>
+          <input type="text" name="container_numbers" value="{{ agreement.container_numbers if agreement else '' }}" placeholder="TGBU8632621">
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Примітки</label>
+          <textarea name="notes" rows="2" placeholder="Нотатки...">{{ agreement.notes if agreement else '' }}</textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span style="font-size:13px;font-weight:500;">Логістика</span></div>
+      <div class="card-body">
+        <div class="grid grid-2" style="gap:10px;">
+          <div class="form-group">
+            <label>ETD — дата завантаження</label>
+            <input type="date" name="etd" value="{{ agreement.etd if agreement else '' }}">
+          </div>
+          <div class="form-group">
+            <label>ETA — дата прибуття</label>
+            <input type="date" name="eta" value="{{ agreement.eta if agreement else '' }}">
+          </div>
+          <div class="form-group">
+            <label>POL — порт завантаження</label>
+            {{ combo_field('pol', agreement.pol if agreement else '', opts.pol) }}
+          </div>
+          <div class="form-group">
+            <label>POD — порт прибуття</label>
+            {{ combo_field('pod', agreement.pod if agreement else '', opts.pod) }}
+          </div>
+          <div class="form-group" style="grid-column:span 2;">
+            <label>Лінія</label>
+            {{ combo_field('shipping_line', agreement.shipping_line if agreement else '', opts.shipping_line) }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span style="font-size:13px;font-weight:500;">Документи</span></div>
+      <div class="card-body">
+        <div class="grid grid-2" style="gap:10px;align-items:end;">
+          <div>
+            <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;color:var(--text);cursor:pointer;margin-bottom:0;">
+              <input type="checkbox" name="docs_received" value="1" style="width:15px;height:15px;"
+                {{ 'checked' if agreement and agreement.docs_received }}
+                onchange="document.getElementById('doc-date-wrap').style.opacity=this.checked?'1':'0.4'">
+              Документи отримано
+            </label>
+          </div>
+          <div id="doc-date-wrap" style="opacity:{{ '1' if agreement and agreement.docs_received else '0.4' }};">
+            <label>Дата отримання</label>
+            <input type="date" name="docs_received_date" value="{{ agreement.docs_received_date if agreement else '' }}">
+          </div>
+        </div>
+        <div class="form-group" style="margin-top:10px;margin-bottom:0;">
+          <label>Примітки до документів</label>
+          <textarea name="docs_notes" rows="2" placeholder="Коментар...">{{ agreement.docs_notes if agreement else '' }}</textarea>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- RIGHT -->
+  <div style="display:flex;flex-direction:column;gap:14px;">
+
+    <div class="card">
+      <div class="card-header"><span style="font-size:13px;font-weight:500;">Вартість доставки</span></div>
+      <div class="card-body">
+        <div class="grid grid-2" style="gap:10px;">
+          <div class="form-group">
+            <label>Фрахт ($)</label>
+            <input type="number" name="freight_usd" step="0.01" value="{{ agreement.freight_usd if agreement else '' }}" placeholder="0" id="freight" oninput="updateDelivery()">
+          </div>
+          <div class="form-group">
+            <label>Наземка ($)</label>
+            <input type="number" name="inland_usd" step="0.01" value="{{ agreement.inland_usd if agreement else '' }}" placeholder="0" id="inland" oninput="updateDelivery()">
+          </div>
+        </div>
+        <div style="background:var(--bg3);border-radius:6px;padding:11px 13px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-size:12px;color:var(--muted);">Загальна вартість доставки</span>
+            <span style="font-size:16px;font-weight:500;" id="delivery-total">$0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span style="font-size:13px;font-weight:500;">Оплата товару</span></div>
+      <div class="card-body">
+        <div class="form-group" style="margin-bottom:8px;">
+          <label>Оплачено (%)</label>
+          <input type="number" name="goods_payment_percent" min="0" max="100" step="1"
+            value="{{ agreement.goods_payment_percent|int if agreement else '' }}" placeholder="0" id="goods-pct" oninput="updateGoods()">
+        </div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;">
+          {% for pct in [30,50,70,100] %}
+          <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('goods-pct').value={{ pct }};updateGoods()">{{ pct }}%</button>
+          {% endfor %}
+        </div>
+        <div style="background:var(--bg3);border-radius:6px;padding:11px 13px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+            <span style="font-size:12px;color:var(--muted);">Сума товарів</span>
+            <span style="font-size:13px;font-weight:500;" id="goods-total-d">$0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;">
+            <span style="font-size:12px;color:var(--muted);">Не оплачено</span>
+            <span style="font-size:13px;font-weight:500;color:var(--danger);" id="goods-rem-d">$0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span style="font-size:13px;font-weight:500;">Товари в угоді</span>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="addGood()">+ Додати</button>
+      </div>
+      <div id="goods-list">
+        {% if goods %}
+          {% for g in goods %}
+          <div class="good-row" style="display:grid;grid-template-columns:1fr 70px 60px 85px 28px;gap:6px;padding:10px 14px;border-bottom:1px solid var(--border);align-items:end;">
+            <div>
+              <label>Назва</label>
+              <select name="good_name[]" onchange="handleGoodSelect(this)">
+                <option value="">— оберіть —</option>
+                {% for opt in opts.good_name %}
+                <option value="{{ opt }}" {{ 'selected' if g.name==opt }}>{{ opt }}</option>
+                {% endfor %}
+                {% if g.name and g.name not in opts.good_name %}
+                <option value="{{ g.name }}" selected>{{ g.name }}</option>
+                {% endif %}
+                <option value="__add__">+ Додати до списку...</option>
+              </select>
+
+            </div>
+            <div><label>К-сть</label><input type="number" name="good_qty[]" value="{{ g.quantity }}" step="0.01" placeholder="0" oninput="updateGoods()"></div>
+            <div><label>Од.</label>
+              <select name="good_unit[]">{% for u in ['шт','кг','м','л','компл'] %}<option value="{{ u }}" {{ 'selected' if g.unit==u }}>{{ u }}</option>{% endfor %}</select>
+            </div>
+            <div><label>Ціна ($)</label><input type="number" name="good_price[]" value="{{ g.price_usd }}" step="0.01" placeholder="0" oninput="updateGoods()"></div>
+            <div style="display:flex;align-items:flex-end;">
+              <button type="button" onclick="this.closest('.good-row').remove();updateGoods()" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:5px;width:28px;height:34px;cursor:pointer;font-size:12px;">✕</button>
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div id="goods-empty" style="padding:18px;text-align:center;color:var(--hint);font-size:13px;">Натисни "+ Додати" щоб додати товар</div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+  <a href="/" class="btn btn-ghost">Скасувати</a>
+  <button type="submit" class="btn btn-primary">{{ '💾 Зберегти' if agreement else '✓ Створити' }}</button>
+</div>
+</form>
+
+<script>
+const GOOD_OPTS = {{ opts.good_name | tojson }};
+
+// Handle select change for combo fields
+function handleSelect(sel, cat) {
+  const wrap = sel.parentElement;
+  const customInput = document.getElementById('custom-' + cat);
+  if (sel.value === '__add__') {
+    const val = prompt('Новий варіант для списку:');
+    if (val && val.trim()) {
+      fetch(`/api/options/${cat}`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({value:val.trim()})})
+        .then(r => r.json()).then(items => {
+          // Add new option before special options
+          const opt = document.createElement('option');
+          opt.value = val.trim(); opt.textContent = val.trim(); opt.selected = true;
+          sel.insertBefore(opt, sel.querySelector('option[value="__custom__"]'));
+          sel.value = val.trim();
+          if (customInput) customInput.style.display = 'none';
+        });
+    } else {
+      sel.value = '';
+    }
+  }
+}
+
+function handleGoodSelect(sel) {
+  const row = sel.closest('.good-row');
+  const customInput = row.querySelector('[name="good_name_custom[]"]');
+  if (sel.value === '__add__') {
+    const val = prompt('Новий варіант товару:');
+    if (val && val.trim()) {
+      fetch('/api/options/good_name', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({value:val.trim()})})
+        .then(r => r.json()).then(() => {
+          const opt = document.createElement('option');
+          opt.value = val.trim(); opt.textContent = val.trim(); opt.selected = true;
+          sel.insertBefore(opt, sel.querySelector('option[value="__custom__"]'));
+          sel.value = val.trim();
+          customInput.style.display = 'none';
+          // Also add to new row template
+          GOOD_OPTS.push(val.trim());
+        });
+    } else { sel.value = ''; }
+  }
+}
+
+function addGood() {
+  document.getElementById('goods-empty')?.remove();
+  const opts = GOOD_OPTS.map(v => `<option value="${v}">${v}</option>`).join('');
+  const html = `<div class="good-row" style="display:grid;grid-template-columns:1fr 70px 60px 85px 28px;gap:6px;padding:10px 14px;border-bottom:1px solid var(--border);align-items:end;">
+    <div>
+      <label>Назва</label>
+      <select name="good_name[]" onchange="handleGoodSelect(this)">
+        <option value="">— оберіть —</option>
+        ${opts}
+        <option value="__add__">+ Додати до списку...</option>
+      </select>
+    </div>
+    <div><label>К-сть</label><input type="number" name="good_qty[]" placeholder="0" step="0.01" oninput="updateGoods()"></div>
+    <div><label>Од.</label><select name="good_unit[]"><option>шт</option><option>кг</option><option>м</option><option>л</option><option>компл</option></select></div>
+    <div><label>Ціна ($)</label><input type="number" name="good_price[]" placeholder="0" step="0.01" oninput="updateGoods()"></div>
+    <div style="display:flex;align-items:flex-end;"><button type="button" onclick="this.closest('.good-row').remove();updateGoods()" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:5px;width:28px;height:34px;cursor:pointer;font-size:12px;">✕</button></div>
+  </div>`;
+  document.getElementById('goods-list').insertAdjacentHTML('beforeend', html);
+}
+
+// Before submit — merge select + custom input values into final field
+function prepareSubmit() {
+  const cats = ['container_count','supplier','pol','pod','shipping_line'];
+  cats.forEach(cat => {
+    const sel = document.querySelector(`[name="${cat}"]`);
+    const custom = document.getElementById('custom-' + cat);
+    if (!sel) return;
+    if (custom && custom.style.display !== 'none' && custom.value.trim()) {
+      sel.value = custom.value.trim();
+      const opt = document.createElement('option');
+      opt.value = custom.value.trim(); opt.selected = true;
+      sel.appendChild(opt);
+    }
+  });
+
+  // Goods names
+  document.querySelectorAll('.good-row').forEach(row => {
+    const sel = row.querySelector('[name="good_name[]"]');
+    const custom = row.querySelector('[name="good_name_custom[]"]');
+    if (sel && custom && custom.style.display !== 'none' && custom.value.trim()) {
+      const opt = document.createElement('option');
+      opt.value = custom.value.trim(); opt.selected = true;
+      sel.appendChild(opt);
+      sel.value = custom.value.trim();
+    }
+  });
+}
+
+function updateGoods() {
+  let total = 0;
+  document.querySelectorAll('.good-row').forEach(r => {
+    total += (parseFloat(r.querySelector('[name="good_qty[]"]')?.value)||0) *
+             (parseFloat(r.querySelector('[name="good_price[]"]')?.value)||0);
+  });
+  const pct = parseFloat(document.getElementById('goods-pct')?.value)||0;
+  document.getElementById('goods-total-d').textContent = '$'+Math.round(total).toLocaleString();
+  document.getElementById('goods-rem-d').textContent   = '$'+Math.round(total*(1-pct/100)).toLocaleString();
+}
+
+function updateDelivery() {
+  const f = parseFloat(document.getElementById('freight').value)||0;
+  const i = parseFloat(document.getElementById('inland').value)||0;
+  document.getElementById('delivery-total').textContent = '$'+Math.round(f+i).toLocaleString();
+}
+
+updateDelivery(); updateGoods();
+</script>
+{% endblock %}
