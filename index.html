@@ -32,13 +32,12 @@
 @media(max-width:768px) {
   .filter-toggle { display:flex; }
   .filter-desktop { display:none !important; }
-  .filter-mobile { display:flex !important; }
   .table-wrap { display:none !important; }
   .cards-wrap { display:flex !important; }
   #cols-btn { display:inline-flex !important; }
   main { padding:12px !important; }
 }
-.filter-mobile {
+#mobile-filters {
   display:none;
   flex-direction:column;
   gap:8px;
@@ -48,7 +47,7 @@
   border-radius:var(--radius);
   padding:12px;
 }
-.filter-mobile select, .filter-mobile input { width:100%; }
+#mobile-filters select, #mobile-filters input { width:100%; }
 .cards-wrap {
   display:none;
   flex-direction:column;
@@ -94,7 +93,7 @@
 </div>
 
 <!-- MOBILE FILTERS -->
-<div class="filter-mobile" id="mobile-filters" style="display:none;">
+<div id="mobile-filters" style="display:none;flex-direction:column;gap:8px;margin-bottom:14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;">
   <form method="get" style="display:contents;">
     <input type="hidden" name="status" value="{{ status_filter }}">
     <input type="text" name="search" value="{{ search }}" placeholder="Пошук...">
@@ -337,11 +336,12 @@ function sortBy(col) {
 }
 function toggleFilters() {
   const f = document.getElementById('mobile-filters');
-  const s = document.getElementById('sort-panel');
-  s.style.display = 'none';
-  const isOpen = f.style.display === 'flex' || f.style.display === 'block';
-  f.style.display = isOpen ? 'none' : 'flex';
-  f.style.flexDirection = 'column';
+  const sp = document.getElementById('sort-panel');
+  if (sp) sp.style.display = 'none';
+  const shown = getComputedStyle(f).display !== 'none';
+  f.style.cssText = shown
+    ? 'display:none'
+    : 'display:flex;flex-direction:column;gap:8px;margin-bottom:14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;';
 }
 function toggleDesktopFilters() {
   const body = document.getElementById('desktop-filters-body');
