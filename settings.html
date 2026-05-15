@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block topbar_title %}Налаштування{% endblock %}
+{% block content %}
+<div style="max-width:700px;">
+
+<div class="card" style="margin-bottom:16px;">
+  <div class="card-header"><span style="font-size:13px;font-weight:500;">Стовпці таблиці угод</span></div>
+  <div class="card-body">
+    <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">Обери які стовпці показувати в таблиці активних угод.</p>
+    <div id="cols-list" style="display:flex;flex-direction:column;gap:8px;">
+      {% for c in vis_cols %}
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:13px;color:var(--text);padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);">
+        <input type="checkbox" data-key="{{ c.col_key }}" style="width:15px;height:15px;" {{ 'checked' if c.visible else '' }}>
+        {{ c.col_label }}
+      </label>
+      {% endfor %}
+    </div>
+    <button class="btn btn-primary" style="margin-top:14px;" onclick="saveCols()">Зберегти стовпці</button>
+  </div>
+</div>
+
+{% for cat, label in [('pol','POL — порти завантаження'),('pod','POD — порти прибуття'),('shipping_line','Лінії'),('supplier','Постачальники'),('container_count','Кількість контейнерів'),('good_name','Назви товарів')] %}
+<div class="card" style="margin-bottom:14px;">
+  <div class="card-header">
+    <span style="font-size:13px;font-weight:500;">{{ label }}</span>
+    <button class="btn btn-ghost btn-sm" onclick="addOpt('{{ cat }}')">+ Додати</button>
+  </div>
+  <div id="opts-{{ cat }}" style="padding:10px 14px;display:flex;flex-wrap:wrap;gap:6px;">
+    {% for v in opts[cat] %}
+    <span style="display:inline-flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-size:12px;">
+      {{ v }}
+      <span onclick="delOpt('{{ cat }}','{{ v }}')" style="cursor:pointer;color:var(--muted);font-size:11px;" title="Видалити">✕</span>
+    </span>
+    {% else %}
+    <span style="color:var(--hint);font-size:13px;">Порожньо</span>
+    {% endfor %}
+  </div>
+</div>
+{% endfor %}
+
+</div>
+<script>
+async function addOpt(cat) {
+  const val = prompt('Новий варіант для "'+cat+'":');
+  if (!val?.trim()) return;
+  await fetch(`/api/options/${cat}`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({value:val.trim()})});
+  location.reload();
+}
+async function delOpt(cat, val) {
+  if (!confirm(`Видалити "${val}"?`)) return;
+  await fetch(`/api/options/${cat}/${encodeURIComponent(val)}`, {method:'DELETE'});
+  location.reload();
+}
+async function saveCols() {
+  const cols = [...document.querySelectorAll('#cols-list input[type=checkbox]')].map(el => ({col_key: el.dataset.key, visible: el.checked ? 1 : 0}));
+  await fetch('/api/columns', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cols)});
+  alert('Збережено!');
+}
+</script>
+{% endblock %}
