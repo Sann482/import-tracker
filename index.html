@@ -1,0 +1,364 @@
+{% extends "base.html" %}
+{% block topbar_title %}{% if status_filter == 'archived' %}Архів{% else %}Активні угоди{% endif %} — {{ agreements|length }}{% endblock %}
+{% block topbar_actions %}
+  <a href="/settings" class="btn btn-ghost btn-sm" style="display:none;" id="cols-btn">⚙</a>
+  <a href="/agreement/new" class="btn btn-primary btn-sm">+ Нова угода</a>
+{% endblock %}
+{% block content %}
+
+<style>
+/* MOBILE CARD VIEW */
+.agr-card {
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:14px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  text-decoration:none;
+  color:var(--text);
+  transition:background 0.1s;
+}
+.agr-card:active { background:var(--bg3); }
+.agr-card-header { display:flex; align-items:center; justify-content:space-between; }
+.agr-card-num { font-weight:500; font-size:15px; }
+.agr-card-row { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); flex-wrap:wrap; }
+.agr-card-row strong { color:var(--text); }
+.agr-card-actions { display:flex; gap:6px; margin-top:4px; }
+
+/* FILTERS MOBILE */
+.filter-toggle { display:none; }
+@media(max-width:768px) {
+  .filter-toggle { display:flex; }
+  .filter-desktop { display:none !important; }
+  .table-wrap { display:none !important; }
+  .cards-wrap { display:flex !important; }
+  #cols-btn { display:inline-flex !important; }
+  main { padding:12px !important; }
+}
+#mobile-filters {
+  display:none;
+  flex-direction:column;
+  gap:8px;
+  margin-bottom:14px;
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:12px;
+}
+#mobile-filters select, #mobile-filters input { width:100%; }
+.cards-wrap {
+  display:none;
+  flex-direction:column;
+  gap:10px;
+}
+.table-wrap {
+  overflow-x:auto;
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  background:var(--bg2);
+}
+.status-dot {
+  width:8px; height:8px; border-radius:50%; flex-shrink:0;
+}
+</style>
+
+<!-- MOBILE TOP BAR -->
+<div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;flex-wrap:wrap;">
+  <a href="/?status=active" class="btn btn-sm {% if status_filter=='active' %}btn-primary{% else %}btn-ghost{% endif %}">Активні</a>
+  <a href="/?status=archived" class="btn btn-sm {% if status_filter=='archived' %}btn-primary{% else %}btn-ghost{% endif %}">Архів</a>
+  <button class="btn btn-ghost btn-sm filter-toggle" onclick="toggleFilters()" id="filter-btn">
+    ⚙ Фільтри{% if search or f_supplier or f_line or f_pol or f_pod or f_terms %} ●{% endif %}
+  </button>
+  <button class="btn btn-ghost btn-sm filter-toggle" onclick="toggleSort()" id="sort-btn">↕ Сортування</button>
+  {% if search or f_supplier or f_line or f_pol or f_pod or f_terms %}
+  <a href="/?status={{ status_filter }}" class="btn btn-ghost btn-sm" style="color:var(--danger);font-weight:500;">✕ Скинути</a>
+  {% endif %}
+</div>
+
+<!-- MOBILE SORT PANEL -->
+<div id="sort-panel" style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:10px;flex-direction:column;gap:6px;">
+  <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Сортувати за</div>
+  {% for col, label in [('eta','ETA склад'),('etd','ETD'),('agreement_number','Номером угоди'),('supplier','Постачальником'),('shipping_line','Лінією'),('created_at','Датою створення')] %}
+  <a href="?status={{ status_filter }}&sort={{ col }}&dir={% if sort_by==col and sort_dir=='asc' %}desc{% else %}asc{% endif %}{% if search %}&search={{ search }}{% endif %}"
+    style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:6px;text-decoration:none;font-size:14px;
+    background:{% if sort_by==col %}var(--bg3){% else %}transparent{% endif %};
+    color:{% if sort_by==col %}var(--text){% else %}var(--muted){% endif %};
+    border:1px solid {% if sort_by==col %}var(--border2){% else %}transparent{% endif %};">
+    <span>{{ label }}</span>
+    {% if sort_by==col %}<span>{{ '↑' if sort_dir=='asc' else '↓' }}</span>{% endif %}
+  </a>
+  {% endfor %}
+</div>
+
+<!-- MOBILE FILTERS -->
+<div id="mobile-filters" style="display:none;flex-direction:column;gap:8px;margin-bottom:14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;">
+  <form method="get" style="display:contents;">
+    <input type="hidden" name="status" value="{{ status_filter }}">
+    <input type="text" name="search" value="{{ search }}" placeholder="Пошук...">
+    <select name="f_supplier" onchange="this.form.submit()">
+      <option value="">Всі постачальники</option>
+      {% for s in all_suppliers %}<option value="{{ s }}" {{ 'selected' if f_supplier==s }}>{{ s[:30] }}</option>{% endfor %}
+    </select>
+    <select name="f_line" onchange="this.form.submit()">
+      <option value="">Всі лінії</option>
+      {% for l in all_lines %}<option value="{{ l }}" {{ 'selected' if f_line==l }}>{{ l }}</option>{% endfor %}
+    </select>
+    <select name="f_pol" onchange="this.form.submit()">
+      <option value="">Всі POL</option>
+      {% for p in all_pol %}<option value="{{ p }}" {{ 'selected' if f_pol==p }}>{{ p[:25] }}</option>{% endfor %}
+    </select>
+    <select name="f_pod" onchange="this.form.submit()">
+      <option value="">Всі POD</option>
+      {% for p in all_pod %}<option value="{{ p }}" {{ 'selected' if f_pod==p }}>{{ p[:25] }}</option>{% endfor %}
+    </select>
+    <select name="f_terms" onchange="this.form.submit()">
+      <option value="">Всі умови</option>
+      {% for t in ['FOB','CIF','EXW','DAP','CFR'] %}<option value="{{ t }}" {{ 'selected' if f_terms==t }}>{{ t }}</option>{% endfor %}
+    </select>
+    <button type="submit" class="btn btn-primary btn-sm">Шукати</button>
+  </form>
+</div>
+
+<!-- DESKTOP FILTER BAR -->
+<div class="filter-desktop" id="desktop-filter-wrap" style="margin-bottom:12px;">
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+    <button class="btn btn-ghost btn-sm" onclick="toggleDesktopFilters()" id="desktop-filter-btn">
+      ⚙ Фільтри{% if search or f_supplier or f_line or f_pol or f_pod or f_terms %} <span style="color:var(--danger);">●</span>{% endif %}
+    </button>
+    {% if search or f_supplier or f_line or f_pol or f_pod or f_terms %}
+    <a href="/?status={{ status_filter }}" class="btn btn-ghost btn-sm" style="color:var(--danger);">✕ Скинути фільтри</a>
+    {% endif %}
+    <span style="font-size:12px;color:var(--hint);margin-left:4px;" id="desktop-filter-hint"></span>
+  </div>
+  <div id="desktop-filters-body" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;display:none;">
+    <form method="get" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <input type="hidden" name="status" value="{{ status_filter }}">
+      <input type="text" name="search" value="{{ search }}" placeholder="Пошук..." style="width:180px;">
+      <select name="f_supplier" style="width:160px;" onchange="this.form.submit()">
+        <option value="">Всі постачальники</option>
+        {% for s in all_suppliers %}<option value="{{ s }}" {{ 'selected' if f_supplier==s }}>{{ s[:25] }}</option>{% endfor %}
+      </select>
+      <select name="f_line" style="width:120px;" onchange="this.form.submit()">
+        <option value="">Всі лінії</option>
+        {% for l in all_lines %}<option value="{{ l }}" {{ 'selected' if f_line==l }}>{{ l }}</option>{% endfor %}
+      </select>
+      <select name="f_pol" style="width:140px;" onchange="this.form.submit()">
+        <option value="">Всі POL</option>
+        {% for p in all_pol %}<option value="{{ p }}" {{ 'selected' if f_pol==p }}>{{ p[:20] }}</option>{% endfor %}
+      </select>
+      <select name="f_pod" style="width:140px;" onchange="this.form.submit()">
+        <option value="">Всі POD</option>
+        {% for p in all_pod %}<option value="{{ p }}" {{ 'selected' if f_pod==p }}>{{ p[:20] }}</option>{% endfor %}
+      </select>
+      <select name="f_terms" style="width:100px;" onchange="this.form.submit()">
+        <option value="">Всі умови</option>
+        {% for t in ['FOB','CIF','EXW','DAP','CFR'] %}<option value="{{ t }}" {{ 'selected' if f_terms==t }}>{{ t }}</option>{% endfor %}
+      </select>
+      <button type="submit" class="btn btn-ghost btn-sm">Шукати</button>
+    </form>
+  </div>
+</div>
+
+{% set col_map = {} %}
+{% for c in vis_cols %}{% if c.visible %}{% set _ = col_map.update({c.col_key: c.col_label}) %}{% endif %}{% endfor %}
+
+{% if agreements %}
+
+<!-- MOBILE CARDS -->
+<div class="cards-wrap" id="cards-wrap">
+  {% for item in agreements %}
+  {% set a = item.data %}
+  {% set days = item.days_until_eta %}
+  {% if days is not none and days < 0 %}{% set dot_color = 'var(--danger)' %}{% set rbg = '#fef2f2' %}
+  {% elif days is not none and days <= 7 %}{% set dot_color = 'var(--warn)' %}{% set rbg = '#fffbeb' %}
+  {% else %}{% set dot_color = 'var(--ok)' %}{% set rbg = '' %}{% endif %}
+
+  <div style="background:{{ rbg or 'var(--bg2)' }};border:1px solid var(--border);border-radius:var(--radius);padding:14px;">
+    <!-- Header row -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div class="status-dot" style="background:{{ dot_color }};"></div>
+        <a href="/agreement/{{ a.id }}" style="font-weight:500;font-size:15px;color:var(--text);text-decoration:none;">
+          {% if a.agreement_number %}#{{ a.agreement_number }}{% else %}Угода {{ a.id }}{% endif %}
+        </a>
+        {% if a.delivery_terms %}<span class="tag">{{ a.delivery_terms }}</span>{% endif %}
+      </div>
+      <div style="display:flex;gap:4px;">
+        <a href="/agreement/{{ a.id }}/edit" class="btn btn-ghost btn-sm">✎</a>
+        {% if a.status == 'active' %}
+        <form method="post" action="/agreement/{{ a.id }}/archive" style="display:inline;">
+          <button type="submit" class="btn btn-success btn-sm" onclick="return confirm('В архів?')">📦</button>
+        </form>
+        {% else %}
+        <form method="post" action="/agreement/{{ a.id }}/restore" style="display:inline;">
+          <button type="submit" class="btn btn-ghost btn-sm">↩</button>
+        </form>
+        {% endif %}
+        <form method="post" action="/agreement/{{ a.id }}/delete" style="display:inline;">
+          <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Видалити?')">✕</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Supplier -->
+    {% if a.supplier %}
+    <div style="font-size:13px;color:var(--muted);margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ a.supplier }}</div>
+    {% endif %}
+
+    <!-- Dates row -->
+    <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px;margin-bottom:6px;">
+      {% if a.eta %}
+      <div>
+        <span style="color:var(--hint);">ETA порт:</span>
+        <span style="color:var(--text);font-weight:500;">{{ a.eta }}</span>
+      </div>
+      {% endif %}
+      {% if a.eta_sklad %}
+      <div>
+        <span style="color:var(--hint);">ETA склад:</span>
+        <span style="color:var(--text);font-weight:500;">{{ a.eta_sklad }}</span>
+      </div>
+      {% endif %}
+      {% if days is not none %}
+      <div>
+        {% if days < 0 %}<span class="badge badge-red">{{ days|abs }} дн. тому</span>
+        {% elif days == 0 %}<span class="badge badge-yellow">сьогодні</span>
+        {% elif days <= 7 %}<span class="badge badge-yellow">за {{ days }} дн.</span>
+        {% else %}<span class="badge badge-blue">за {{ days }} дн.</span>{% endif %}
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Route + Finance -->
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;font-size:12px;">
+      <div style="color:var(--muted);">
+        {% if a.pol and a.pod %}{{ a.pol[:15] }} → {{ a.pod[:15] }}{% endif %}
+        {% if a.shipping_line %} · {{ a.shipping_line }}{% endif %}
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;">
+        {% if item.goods_total > 0 %}
+        <div style="text-align:right;">
+          <div style="font-weight:500;color:var(--text);">${{ "%.0f"|format(item.goods_total) }}</div>
+          <div style="color:var(--hint);">{{ a.goods_payment_percent|int if a.goods_payment_percent else 0 }}% оплачено</div>
+        </div>
+        {% endif %}
+        {% if a.docs_received %}<span class="badge badge-green">Документи ✓</span>{% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- DESKTOP TABLE -->
+<div class="table-wrap" id="table-wrap">
+<table style="width:100%;border-collapse:collapse;font-size:13px;">
+  <thead>
+    <tr style="border-bottom:1px solid var(--border);background:var(--bg3);">
+      {% if 'agreement_number' in col_map %}<th style="padding:9px 14px;text-align:left;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;cursor:pointer;" onclick="sortBy('agreement_number')">Угода {% if sort_by=='agreement_number' %}{{ '↑' if sort_dir=='asc' else '↓' }}{% endif %}</th>{% endif %}
+      {% if 'supplier' in col_map %}<th style="padding:9px 12px;text-align:left;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;cursor:pointer;" onclick="sortBy('supplier')">Постачальник {% if sort_by=='supplier' %}{{ '↑' if sort_dir=='asc' else '↓' }}{% endif %}</th>{% endif %}
+      {% if 'route' in col_map %}<th style="padding:9px 12px;text-align:left;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Маршрут</th>{% endif %}
+      {% if 'shipping_line' in col_map %}<th style="padding:9px 12px;text-align:left;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;cursor:pointer;" onclick="sortBy('shipping_line')">Лінія {% if sort_by=='shipping_line' %}{{ '↑' if sort_dir=='asc' else '↓' }}{% endif %}</th>{% endif %}
+      {% if 'container_count' in col_map %}<th style="padding:9px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Контейнери</th>{% endif %}
+      {% if 'delivery_terms' in col_map %}<th style="padding:9px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Умови</th>{% endif %}
+      {% if 'etd' in col_map %}<th style="padding:9px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;cursor:pointer;" onclick="sortBy('etd')">ETD {% if sort_by=='etd' %}{{ '↑' if sort_dir=='asc' else '↓' }}{% endif %}</th>{% endif %}
+      {% if 'eta' in col_map %}<th style="padding:9px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;cursor:pointer;" onclick="sortBy('eta')">ETA порт {% if sort_by=='eta' %}{{ '↑' if sort_dir=='asc' else '↓' }}{% endif %}</th>{% endif %}
+      <th style="padding:9px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;">ETA склад</th>
+      {% if 'status' in col_map %}<th style="padding:9px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Статус</th>{% endif %}
+      {% if 'freight_usd' in col_map %}<th style="padding:9px 12px;text-align:right;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Фрахт $</th>{% endif %}
+      {% if 'freight' in col_map %}<th style="padding:9px 12px;text-align:right;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Доставка $</th>{% endif %}
+      {% if 'payment' in col_map %}<th style="padding:9px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Оплата товару</th>{% endif %}
+      {% if 'docs' in col_map %}<th style="padding:9px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Документи</th>{% endif %}
+      {% if 'record_number' in col_map %}<th style="padding:9px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Номер запису</th>{% endif %}
+      <th style="padding:9px 14px;text-align:center;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Дії</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for item in agreements %}
+  {% set a = item.data %}
+  {% set days = item.days_until_eta %}
+  {% if days is not none and days < 0 %}{% set rbg='#fef2f2' %}{% elif days is not none and days <= 7 %}{% set rbg='#fffbeb' %}{% else %}{% set rbg='' %}{% endif %}
+  <tr style="border-bottom:1px solid var(--border);background:{{ rbg }};" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='{{ rbg }}'">
+    {% if 'agreement_number' in col_map %}<td style="padding:11px 14px;"><a href="/agreement/{{ a.id }}" style="color:var(--text);text-decoration:none;font-weight:500;">{% if a.agreement_number %}#{{ a.agreement_number }}{% else %}—{% endif %}</a>{% if a.delivery_terms %}<span class="tag" style="margin-left:5px;">{{ a.delivery_terms }}</span>{% endif %}</td>{% endif %}
+    {% if 'supplier' in col_map %}<td style="padding:11px 12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);">{{ a.supplier or '—' }}</td>{% endif %}
+    {% if 'route' in col_map %}<td style="padding:11px 12px;white-space:nowrap;font-size:12px;color:var(--muted);">{% if a.pol and a.pod %}{{ a.pol[:15] }} → {{ a.pod[:15] }}{% else %}—{% endif %}</td>{% endif %}
+    {% if 'shipping_line' in col_map %}<td style="padding:11px 12px;color:var(--muted);font-size:12px;">{{ a.shipping_line or '—' }}</td>{% endif %}
+    {% if 'container_count' in col_map %}<td style="padding:11px 12px;text-align:center;color:var(--muted);font-size:12px;">{{ a.container_count or '—' }}</td>{% endif %}
+    {% if 'delivery_terms' in col_map %}<td style="padding:11px 12px;text-align:center;">{% if a.delivery_terms %}<span class="tag">{{ a.delivery_terms }}</span>{% else %}—{% endif %}</td>{% endif %}
+    {% if 'etd' in col_map %}<td style="padding:11px 12px;text-align:center;font-size:12px;color:var(--muted);">{{ a.etd or '—' }}</td>{% endif %}
+    {% if 'eta' in col_map %}<td style="padding:11px 12px;text-align:center;font-size:12px;color:var(--muted);">{{ a.eta or '—' }}</td>{% endif %}
+    <td style="padding:11px 12px;text-align:center;">
+      {% if a.eta_sklad %}<div style="font-size:12px;color:var(--text);">{{ a.eta_sklad }}</div>
+        {% if days is not none %}{% if days < 0 %}<span class="badge badge-red">{{ days|abs }} дн. тому</span>{% elif days == 0 %}<span class="badge badge-yellow">сьогодні</span>{% elif days <= 7 %}<span class="badge badge-yellow">за {{ days }} дн.</span>{% else %}<span class="badge badge-blue">за {{ days }} дн.</span>{% endif %}{% endif %}
+      {% else %}<span style="color:var(--hint);">—</span>{% endif %}
+    </td>
+    {% if 'status' in col_map %}<td style="padding:11px 12px;text-align:center;">
+      {% if a.status=='archived' %}<span class="badge badge-gray">Архів</span>{% if a.archived_at %}<div style="font-size:11px;color:var(--hint);margin-top:2px;">{{ a.archived_at|string|truncate(10,True,"") if a.archived_at else '' }}</div>{% endif %}{% elif days is not none and days < 0 %}<span class="badge badge-red">Прострочено</span>{% elif days is not none and days <= 7 %}<span class="badge badge-yellow">Скоро</span>{% else %}<span class="badge badge-blue">В дорозі</span>{% endif %}
+      {% if a.docs_received %}<div style="margin-top:3px;"><span class="badge badge-green">Документи ✓</span></div>{% endif %}
+    </td>{% endif %}
+    {% if 'freight_usd' in col_map %}<td style="padding:11px 12px;text-align:right;font-size:12px;">{% if a.freight_usd %}<span>${{ "%.0f"|format(a.freight_usd) }}</span>{% else %}—{% endif %}</td>{% endif %}
+    {% if 'freight' in col_map %}<td style="padding:11px 12px;text-align:right;font-size:12px;">{% if item.delivery_total > 0 %}<span style="font-weight:500;">${{ "%.0f"|format(item.delivery_total) }}</span>{% else %}—{% endif %}</td>{% endif %}
+    {% if 'payment' in col_map %}<td style="padding:11px 12px;text-align:center;">{% if item.goods_total > 0 %}<div style="font-size:12px;font-weight:500;">${{ "%.0f"|format(item.goods_total) }}</div><div style="font-size:11px;color:var(--muted);">{{ a.goods_payment_percent|int if a.goods_payment_percent else 0 }}%</div><div style="margin-top:4px;height:3px;background:var(--bg3);border-radius:2px;width:60px;margin-left:auto;margin-right:auto;"><div style="height:3px;border-radius:2px;width:{{ [a.goods_payment_percent or 0,100]|min }}%;background:{% if (a.goods_payment_percent or 0)>=100 %}var(--ok){% elif (a.goods_payment_percent or 0)>=50 %}var(--warn){% else %}var(--danger){% endif %};"></div></div>{% else %}—{% endif %}</td>{% endif %}
+    {% if 'docs' in col_map %}<td style="padding:11px 12px;text-align:center;">{% if a.docs_received %}<span class="badge badge-green">✓ Отримано</span>{% if a.docs_received_date %}<div style="font-size:11px;color:var(--muted);margin-top:2px;">{{ a.docs_received_date }}</div>{% endif %}{% else %}<span style="color:var(--hint);font-size:12px;">—</span>{% endif %}</td>{% endif %}
+    {% if 'record_number' in col_map %}<td style="padding:11px 12px;text-align:center;font-size:12px;color:var(--muted);">{{ a.record_number or '—' }}</td>{% endif %}
+    <td style="padding:11px 14px;text-align:center;">
+      <div style="display:flex;gap:4px;justify-content:center;">
+        <a href="/agreement/{{ a.id }}/edit" class="btn btn-ghost btn-sm" title="Редагувати">✎</a>
+        {% if a.status == 'active' %}<form method="post" action="/agreement/{{ a.id }}/archive" style="display:inline;"><button type="submit" class="btn btn-success btn-sm" onclick="return confirm('В архів?')">📦</button></form>
+        {% else %}<form method="post" action="/agreement/{{ a.id }}/restore" style="display:inline;"><button type="submit" class="btn btn-ghost btn-sm">↩</button></form>{% endif %}
+        <form method="post" action="/agreement/{{ a.id }}/delete" style="display:inline;"><button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Видалити?')">✕</button></form>
+      </div>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% else %}
+<div style="text-align:center;padding:60px 20px;color:var(--muted);">
+  <div style="font-size:32px;margin-bottom:12px;">📦</div>
+  <div style="font-size:15px;margin-bottom:6px;color:var(--text);">{% if status_filter=='archived' %}Архів порожній{% else %}Немає активних угод{% endif %}</div>
+  <div style="font-size:13px;margin-bottom:20px;">{% if search or f_supplier or f_line %}Нічого не знайдено{% elif status_filter=='active' %}Додай першу угоду{% endif %}</div>
+  {% if status_filter=='active' %}<a href="/agreement/new" class="btn btn-primary">+ Нова угода</a>{% endif %}
+</div>
+{% endif %}
+
+<script>
+function sortBy(col) {
+  const url = new URL(window.location);
+  const cur = url.searchParams.get('sort');
+  const dir = url.searchParams.get('dir');
+  url.searchParams.set('sort', col);
+  url.searchParams.set('dir', (cur===col && dir==='asc') ? 'desc' : 'asc');
+  window.location = url;
+}
+function toggleFilters() {
+  const f = document.getElementById('mobile-filters');
+  const sp = document.getElementById('sort-panel');
+  if (sp) sp.style.display = 'none';
+  const shown = getComputedStyle(f).display !== 'none';
+  f.style.cssText = shown
+    ? 'display:none'
+    : 'display:flex;flex-direction:column;gap:8px;margin-bottom:14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;';
+}
+function toggleDesktopFilters() {
+  const body = document.getElementById('desktop-filters-body');
+  const btn  = document.getElementById('desktop-filter-btn');
+  const hint = document.getElementById('desktop-filter-hint');
+  const open = body.style.display === 'none';
+  body.style.display = open ? 'block' : 'none';
+  btn.style.background = open ? 'var(--bg3)' : '';
+  hint.textContent = open ? '' : 'фільтри приховані';
+  localStorage.setItem('filtersOpen', open ? '1' : '0');
+}
+function toggleSort() {
+  const s = document.getElementById('sort-panel');
+  const f = document.getElementById('mobile-filters');
+  f.style.display = 'none';
+  s.style.display = s.style.display === 'flex' ? 'none' : 'flex';
+  if (s.style.display === 'flex') s.style.flexDirection = 'column';
+}
+</script>
+{% endblock %}
