@@ -554,7 +554,7 @@ def get_theme_vars():
         if font and font not in ('Inter', ''):
             vars_list.append(f"--sans:'{font}',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif")
         else:
-            vars_list.append("--sans:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif;--size:14px")
+            vars_list.append("--sans:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif")
         return ';'.join(vars_list)
     except:
         return ''

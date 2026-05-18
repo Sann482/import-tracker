@@ -31,7 +31,7 @@
 
 /* ─── BASE ─────────────────────────────── */
 *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
-html { scroll-behavior:smooth; font-size: 14px; }
+html { scroll-behavior:smooth; font-size: var(--size, 14px); }
 body {
   font-family: var(--sans);
   background: var(--bg);
@@ -768,11 +768,22 @@ async function syncThemeUI(){
     cur.radius=t.radius||'8px';
     cur.size=t.size||'14px';
     cur.colors=t.colors||{};
-    // Font already set by server CSS - only apply size
-    if(t.size){document.documentElement.style.setProperty('--size', t.size);}
-    // Highlight active preset/radius/size buttons
+    // Load Google Font if needed (server sets --sans var but doesn't load the stylesheet)
+    if(t.font && t.font !== 'Inter' && t.fontUrl){
+      var existing = document.getElementById('font-link');
+      if(!existing){
+        var link = document.createElement('link');
+        link.id = 'font-link'; link.rel = 'stylesheet';
+        document.head.appendChild(link);
+        existing = link;
+      }
+      existing.href = 'https://fonts.googleapis.com/css2?family='+t.fontUrl+'&display=swap';
+    }
+    // Highlight active preset/font/radius/size buttons
     document.querySelectorAll('.pb').forEach(b=>b.classList.remove('on'));
     document.getElementById('pp-'+t.preset)?.classList.add('on');
+    document.querySelectorAll('.fb').forEach(b=>b.classList.remove('on'));
+    document.getElementById('ff-'+(t.font||'Inter'))?.classList.add('on');
     document.querySelectorAll('.rb[id^=rr-]').forEach(b=>b.classList.remove('on'));
     document.getElementById('rr-'+(t.radius||'8px'))?.classList.add('on');
     document.querySelectorAll('[id^=ss-]').forEach(b=>b.classList.remove('on'));
