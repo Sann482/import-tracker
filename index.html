@@ -62,6 +62,13 @@
 .status-dot {
   width:8px; height:8px; border-radius:50%; flex-shrink:0;
 }
+.col-chip {
+  display:inline-flex;align-items:center;padding:4px 10px;border-radius:20px;font-size:12px;
+  cursor:grab;user-select:none;background:var(--bg3);color:var(--muted);
+  border:1px solid var(--border);transition:opacity 0.15s;
+}
+.col-chip.on { background:var(--accent);color:#fff;border-color:var(--accent); }
+.col-chip:active { cursor:grabbing; }
 </style>
 
 <!-- MOBILE TOP BAR -->
@@ -161,6 +168,24 @@
   </div>
 </div>
 
+<!-- COLUMN SETTINGS PANEL (desktop only) -->
+<div class="filter-desktop" style="margin-bottom:10px;">
+  <button class="btn btn-ghost btn-sm" onclick="toggleColPanel()" id="col-panel-btn">⊞ Стовпці</button>
+  <div id="col-panel-body" style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-top:8px;">
+    <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Перетягни для зміни порядку · клікни щоб показати/приховати</div>
+    <div id="col-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+      {% for c in vis_cols %}
+      <div class="col-chip {{ 'on' if c.visible else '' }}" data-key="{{ c.col_key }}" data-vis="{{ '1' if c.visible else '0' }}"
+        draggable="true" onclick="toggleChip(this)">{{ c.col_label }}</div>
+      {% endfor %}
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button type="button" class="btn btn-primary btn-sm" onclick="saveColSettings()">Зберегти</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="toggleColPanel()">Закрити</button>
+    </div>
+  </div>
+</div>
+
 {% set col_map = {} %}
 {% for c in vis_cols %}{% if c.visible %}{% set _ = col_map.update({c.col_key: c.col_label}) %}{% endif %}{% endfor %}
 
@@ -256,22 +281,28 @@
 <table style="width:100%;border-collapse:collapse;font-size:13px;">
   <thead>
     <tr style="border-bottom:1px solid var(--border);background:var(--bg3);">
-      {% if 'agreement_number' in col_map %}<th style="padding:9px 14px;text-align:left;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;cursor:pointer;" onclick="sortBy('agreement_number')">Угода {% if sort_by=='agreement_number' %}{{ '↑' if sort_dir=='asc' else '↓' }}{% endif %}</th>{% endif %}
-      {% if 'supplier' in col_map %}<th style="padding:9px 12px;text-align:left;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;cursor:pointer;" onclick="sortBy('supplier')">Постачальник {% if sort_by=='supplier' %}{{ '↑' if sort_dir=='asc' else '↓' }}{% endif %}</th>{% endif %}
-      {% if 'route' in col_map %}<th style="padding:9px 12px;text-align:left;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Маршрут</th>{% endif %}
-      {% if 'shipping_line' in col_map %}<th style="padding:9px 12px;text-align:left;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;cursor:pointer;" onclick="sortBy('shipping_line')">Лінія {% if sort_by=='shipping_line' %}{{ '↑' if sort_dir=='asc' else '↓' }}{% endif %}</th>{% endif %}
-      {% if 'container_count' in col_map %}<th style="padding:9px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Контейнери</th>{% endif %}
-      {% if 'delivery_terms' in col_map %}<th style="padding:9px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Умови</th>{% endif %}
-      {% if 'etd' in col_map %}<th style="padding:9px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;cursor:pointer;" onclick="sortBy('etd')">ETD {% if sort_by=='etd' %}{{ '↑' if sort_dir=='asc' else '↓' }}{% endif %}</th>{% endif %}
-      {% if 'eta' in col_map %}<th style="padding:9px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;cursor:pointer;" onclick="sortBy('eta')">ETA порт {% if sort_by=='eta' %}{{ '↑' if sort_dir=='asc' else '↓' }}{% endif %}</th>{% endif %}
-      <th style="padding:9px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;">ETA склад</th>
-      {% if 'status' in col_map %}<th style="padding:9px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Статус</th>{% endif %}
-      {% if 'freight_usd' in col_map %}<th style="padding:9px 12px;text-align:right;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Фрахт $</th>{% endif %}
-      {% if 'freight' in col_map %}<th style="padding:9px 12px;text-align:right;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Доставка $</th>{% endif %}
-      {% if 'payment' in col_map %}<th style="padding:9px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Оплата товару</th>{% endif %}
-      {% if 'docs' in col_map %}<th style="padding:9px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Документи</th>{% endif %}
-      {% if 'record_number' in col_map %}<th style="padding:9px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Номер запису</th>{% endif %}
-      <th style="padding:9px 14px;text-align:center;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Дії</th>
+      {% set thl = "padding:9px 12px;text-align:left;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;" %}
+      {% set thc = "padding:9px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;" %}
+      {% set thr = "padding:9px 12px;text-align:right;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;" %}
+      {% for c in vis_cols %}{% if c.visible %}{% set k = c.col_key %}
+      {% if k == 'agreement_number' %}<th style="{{ thl }}cursor:pointer;" onclick="sortBy('agreement_number')">Угода {% if sort_by=='agreement_number' %}{{ '↑' if sort_dir=='asc' else '↓' }}{% endif %}</th>
+      {% elif k == 'supplier' %}<th style="{{ thl }}cursor:pointer;" onclick="sortBy('supplier')">Постачальник {% if sort_by=='supplier' %}{{ '↑' if sort_dir=='asc' else '↓' }}{% endif %}</th>
+      {% elif k == 'route' %}<th style="{{ thl }}">Маршрут</th>
+      {% elif k == 'shipping_line' %}<th style="{{ thl }}cursor:pointer;" onclick="sortBy('shipping_line')">Лінія {% if sort_by=='shipping_line' %}{{ '↑' if sort_dir=='asc' else '↓' }}{% endif %}</th>
+      {% elif k == 'container_count' %}<th style="{{ thc }}cursor:pointer;" onclick="sortBy('container_count')">Контейнери {% if sort_by=='container_count' %}{{ '↑' if sort_dir=='asc' else '↓' }}{% endif %}</th>
+      {% elif k == 'delivery_terms' %}<th style="{{ thc }}cursor:pointer;" onclick="sortBy('delivery_terms')">Умови {% if sort_by=='delivery_terms' %}{{ '↑' if sort_dir=='asc' else '↓' }}{% endif %}</th>
+      {% elif k == 'etd' %}<th style="{{ thc }}cursor:pointer;" onclick="sortBy('etd')">ETD {% if sort_by=='etd' %}{{ '↑' if sort_dir=='asc' else '↓' }}{% endif %}</th>
+      {% elif k == 'eta' %}<th style="{{ thc }}cursor:pointer;" onclick="sortBy('eta')">ETA порт {% if sort_by=='eta' %}{{ '↑' if sort_dir=='asc' else '↓' }}{% endif %}</th>
+      {% elif k == 'eta_sklad' %}<th style="{{ thc }}cursor:pointer;" onclick="sortBy('eta_sklad')">ETA склад {% if sort_by=='eta_sklad' %}{{ '↑' if sort_dir=='asc' else '↓' }}{% endif %}</th>
+      {% elif k == 'status' %}<th style="{{ thc }}">Статус</th>
+      {% elif k == 'freight_usd' %}<th style="{{ thr }}cursor:pointer;" onclick="sortBy('freight_usd')">Фрахт $ {% if sort_by=='freight_usd' %}{{ '↑' if sort_dir=='asc' else '↓' }}{% endif %}</th>
+      {% elif k == 'freight' %}<th style="{{ thr }}">Доставка $</th>
+      {% elif k == 'payment' %}<th style="{{ thc }}">Оплата товару</th>
+      {% elif k == 'docs' %}<th style="{{ thc }}">Документи</th>
+      {% elif k == 'record_number' %}<th style="{{ thc }}cursor:pointer;" onclick="sortBy('record_number')">Номер запису {% if sort_by=='record_number' %}{{ '↑' if sort_dir=='asc' else '↓' }}{% endif %}</th>
+      {% endif %}
+      {% endif %}{% endfor %}
+      <th style="{{ thc }}">Дії</th>
     </tr>
   </thead>
   <tbody>
@@ -280,28 +311,46 @@
   {% set days = item.days_until_eta %}
   {% if days is not none and days < 0 %}{% set rbg='#fef2f2' %}{% elif days is not none and days <= 7 %}{% set rbg='#fffbeb' %}{% else %}{% set rbg='' %}{% endif %}
   <tr style="border-bottom:1px solid var(--border);background:{{ rbg }};" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='{{ rbg }}'">
-    {% if 'agreement_number' in col_map %}<td style="padding:11px 14px;"><a href="/agreement/{{ a.id }}" style="color:var(--text);text-decoration:none;font-weight:500;">{% if a.agreement_number %}#{{ a.agreement_number }}{% else %}—{% endif %}</a>{% if a.delivery_terms %}<span class="tag" style="margin-left:5px;">{{ a.delivery_terms }}</span>{% endif %}</td>{% endif %}
-    {% if 'supplier' in col_map %}<td style="padding:11px 12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);">{{ a.supplier or '—' }}</td>{% endif %}
-    {% if 'route' in col_map %}<td style="padding:11px 12px;white-space:nowrap;font-size:12px;color:var(--muted);">{% if a.pol and a.pod %}{{ a.pol[:15] }} → {{ a.pod[:15] }}{% else %}—{% endif %}</td>{% endif %}
-    {% if 'shipping_line' in col_map %}<td style="padding:11px 12px;color:var(--muted);font-size:12px;">{{ a.shipping_line or '—' }}</td>{% endif %}
-    {% if 'container_count' in col_map %}<td style="padding:11px 12px;text-align:center;color:var(--muted);font-size:12px;">{{ a.container_count or '—' }}</td>{% endif %}
-    {% if 'delivery_terms' in col_map %}<td style="padding:11px 12px;text-align:center;">{% if a.delivery_terms %}<span class="tag">{{ a.delivery_terms }}</span>{% else %}—{% endif %}</td>{% endif %}
-    {% if 'etd' in col_map %}<td style="padding:11px 12px;text-align:center;font-size:12px;color:var(--muted);">{{ a.etd or '—' }}</td>{% endif %}
-    {% if 'eta' in col_map %}<td style="padding:11px 12px;text-align:center;font-size:12px;color:var(--muted);">{{ a.eta or '—' }}</td>{% endif %}
+    {% for c in vis_cols %}{% if c.visible %}{% set k = c.col_key %}
+    {% if k == 'agreement_number' %}
+    <td style="padding:11px 14px;white-space:nowrap;"><a href="/agreement/{{ a.id }}" style="color:var(--text);text-decoration:none;font-weight:500;">{% if a.agreement_number %}#{{ a.agreement_number }}{% else %}—{% endif %}</a>{% if a.delivery_terms %}<span class="tag" style="margin-left:5px;">{{ a.delivery_terms }}</span>{% endif %}</td>
+    {% elif k == 'supplier' %}
+    <td style="padding:11px 12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);">{{ a.supplier or '—' }}</td>
+    {% elif k == 'route' %}
+    <td style="padding:11px 12px;white-space:nowrap;font-size:12px;color:var(--muted);">{% if a.pol and a.pod %}{{ a.pol[:15] }} → {{ a.pod[:15] }}{% else %}—{% endif %}</td>
+    {% elif k == 'shipping_line' %}
+    <td style="padding:11px 12px;color:var(--muted);font-size:12px;">{{ a.shipping_line or '—' }}</td>
+    {% elif k == 'container_count' %}
+    <td style="padding:11px 12px;text-align:center;color:var(--muted);font-size:12px;">{{ a.container_count or '—' }}</td>
+    {% elif k == 'delivery_terms' %}
+    <td style="padding:11px 12px;text-align:center;">{% if a.delivery_terms %}<span class="tag">{{ a.delivery_terms }}</span>{% else %}—{% endif %}</td>
+    {% elif k == 'etd' %}
+    <td style="padding:11px 12px;text-align:center;font-size:12px;color:var(--muted);">{{ a.etd or '—' }}</td>
+    {% elif k == 'eta' %}
+    <td style="padding:11px 12px;text-align:center;font-size:12px;color:var(--muted);">{{ a.eta or '—' }}</td>
+    {% elif k == 'eta_sklad' %}
     <td style="padding:11px 12px;text-align:center;">
       {% if a.eta_sklad %}<div style="font-size:12px;color:var(--text);">{{ a.eta_sklad }}</div>
         {% if days is not none %}{% if days < 0 %}<span class="badge badge-red">{{ days|abs }} дн. тому</span>{% elif days == 0 %}<span class="badge badge-yellow">сьогодні</span>{% elif days <= 7 %}<span class="badge badge-yellow">за {{ days }} дн.</span>{% else %}<span class="badge badge-blue">за {{ days }} дн.</span>{% endif %}{% endif %}
       {% else %}<span style="color:var(--hint);">—</span>{% endif %}
     </td>
-    {% if 'status' in col_map %}<td style="padding:11px 12px;text-align:center;">
+    {% elif k == 'status' %}
+    <td style="padding:11px 12px;text-align:center;">
       {% if a.status=='archived' %}<span class="badge badge-gray">Архів</span>{% if a.archived_at %}<div style="font-size:11px;color:var(--hint);margin-top:2px;">{{ a.archived_at|string|truncate(10,True,"") if a.archived_at else '' }}</div>{% endif %}{% elif days is not none and days < 0 %}<span class="badge badge-red">Прострочено</span>{% elif days is not none and days <= 7 %}<span class="badge badge-yellow">Скоро</span>{% else %}<span class="badge badge-blue">В дорозі</span>{% endif %}
       {% if a.docs_received %}<div style="margin-top:3px;"><span class="badge badge-green">Документи ✓</span></div>{% endif %}
-    </td>{% endif %}
-    {% if 'freight_usd' in col_map %}<td style="padding:11px 12px;text-align:right;font-size:12px;">{% if a.freight_usd %}<span>${{ "%.0f"|format(a.freight_usd) }}</span>{% else %}—{% endif %}</td>{% endif %}
-    {% if 'freight' in col_map %}<td style="padding:11px 12px;text-align:right;font-size:12px;">{% if item.delivery_total > 0 %}<span style="font-weight:500;">${{ "%.0f"|format(item.delivery_total) }}</span>{% else %}—{% endif %}</td>{% endif %}
-    {% if 'payment' in col_map %}<td style="padding:11px 12px;text-align:center;">{% if item.goods_total > 0 %}<div style="font-size:12px;font-weight:500;">${{ "%.0f"|format(item.goods_total) }}</div><div style="font-size:11px;color:var(--muted);">{{ a.goods_payment_percent|int if a.goods_payment_percent else 0 }}%</div><div style="margin-top:4px;height:3px;background:var(--bg3);border-radius:2px;width:60px;margin-left:auto;margin-right:auto;"><div style="height:3px;border-radius:2px;width:{{ [a.goods_payment_percent or 0,100]|min }}%;background:{% if (a.goods_payment_percent or 0)>=100 %}var(--ok){% elif (a.goods_payment_percent or 0)>=50 %}var(--warn){% else %}var(--danger){% endif %};"></div></div>{% else %}—{% endif %}</td>{% endif %}
-    {% if 'docs' in col_map %}<td style="padding:11px 12px;text-align:center;">{% if a.docs_received %}<span class="badge badge-green">✓ Отримано</span>{% if a.docs_received_date %}<div style="font-size:11px;color:var(--muted);margin-top:2px;">{{ a.docs_received_date }}</div>{% endif %}{% else %}<span style="color:var(--hint);font-size:12px;">—</span>{% endif %}</td>{% endif %}
-    {% if 'record_number' in col_map %}<td style="padding:11px 12px;text-align:center;font-size:12px;color:var(--muted);">{{ a.record_number or '—' }}</td>{% endif %}
+    </td>
+    {% elif k == 'freight_usd' %}
+    <td style="padding:11px 12px;text-align:right;font-size:12px;">{% if a.freight_usd %}<span>${{ "%.0f"|format(a.freight_usd) }}</span>{% else %}—{% endif %}</td>
+    {% elif k == 'freight' %}
+    <td style="padding:11px 12px;text-align:right;font-size:12px;">{% if item.delivery_total > 0 %}<span style="font-weight:500;">${{ "%.0f"|format(item.delivery_total) }}</span>{% else %}—{% endif %}</td>
+    {% elif k == 'payment' %}
+    <td style="padding:11px 12px;text-align:center;">{% if item.goods_total > 0 %}<div style="font-size:12px;font-weight:500;">${{ "%.0f"|format(item.goods_total) }}</div><div style="font-size:11px;color:var(--muted);">{{ a.goods_payment_percent|int if a.goods_payment_percent else 0 }}%</div><div style="margin-top:4px;height:3px;background:var(--bg3);border-radius:2px;width:60px;margin-left:auto;margin-right:auto;"><div style="height:3px;border-radius:2px;width:{{ [a.goods_payment_percent or 0,100]|min }}%;background:{% if (a.goods_payment_percent or 0)>=100 %}var(--ok){% elif (a.goods_payment_percent or 0)>=50 %}var(--warn){% else %}var(--danger){% endif %};"></div></div>{% else %}—{% endif %}</td>
+    {% elif k == 'docs' %}
+    <td style="padding:11px 12px;text-align:center;">{% if a.docs_received %}<span class="badge badge-green">✓ Отримано</span>{% if a.docs_received_date %}<div style="font-size:11px;color:var(--muted);margin-top:2px;">{{ a.docs_received_date }}</div>{% endif %}{% else %}<span style="color:var(--hint);font-size:12px;">—</span>{% endif %}</td>
+    {% elif k == 'record_number' %}
+    <td style="padding:11px 12px;text-align:center;font-size:12px;color:var(--muted);">{{ a.record_number or '—' }}</td>
+    {% endif %}
+    {% endif %}{% endfor %}
     <td style="padding:11px 14px;text-align:center;">
       <div style="display:flex;gap:4px;justify-content:center;">
         <a href="/agreement/{{ a.id }}/edit" class="btn btn-ghost btn-sm" title="Редагувати">✎</a>
@@ -334,6 +383,45 @@ function sortBy(col) {
   url.searchParams.set('dir', (cur===col && dir==='asc') ? 'desc' : 'asc');
   window.location = url;
 }
+function toggleColPanel() {
+  const body = document.getElementById('col-panel-body');
+  body.style.display = body.style.display === 'none' ? 'block' : 'none';
+}
+let _chipDrag = false;
+function toggleChip(chip) {
+  if (_chipDrag) return;
+  chip.classList.toggle('on');
+  chip.dataset.vis = chip.classList.contains('on') ? '1' : '0';
+}
+async function saveColSettings() {
+  const chips = [...document.querySelectorAll('#col-chips .col-chip')];
+  const cols = chips.map((c, i) => ({col_key: c.dataset.key, visible: c.dataset.vis === '1' ? 1 : 0, sort_order: i}));
+  const res = await fetch('/api/columns', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(cols)});
+  if (res.ok) location.reload();
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const container = document.getElementById('col-chips');
+  if (!container) return;
+  let dragSrc = null;
+  container.addEventListener('dragstart', e => {
+    dragSrc = e.target.closest('.col-chip');
+    if (dragSrc) { _chipDrag = true; dragSrc.style.opacity = '0.4'; e.dataTransfer.effectAllowed = 'move'; }
+  });
+  container.addEventListener('dragend', () => {
+    if (dragSrc) dragSrc.style.opacity = '1';
+    dragSrc = null;
+    setTimeout(() => { _chipDrag = false; }, 0);
+  });
+  container.addEventListener('dragover', e => {
+    e.preventDefault();
+    const target = e.target.closest('.col-chip');
+    if (target && target !== dragSrc) {
+      const rect = target.getBoundingClientRect();
+      if (e.clientX > rect.left + rect.width / 2) target.after(dragSrc);
+      else target.before(dragSrc);
+    }
+  });
+});
 function toggleFilters() {
   const f = document.getElementById('mobile-filters');
   const sp = document.getElementById('sort-panel');
