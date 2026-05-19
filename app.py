@@ -282,11 +282,7 @@ def api_save_cols():
     conn = get_db()
     try:
         for c in request.json:
-            so = c.get('sort_order')
-            if so is not None:
-                execute(conn, "UPDATE visible_columns SET visible=?, sort_order=? WHERE col_key=?", (c['visible'], so, c['col_key']))
-            else:
-                execute(conn, "UPDATE visible_columns SET visible=? WHERE col_key=?", (c['visible'], c['col_key']))
+            execute(conn, "UPDATE visible_columns SET visible=? WHERE col_key=?", (c['visible'],c['col_key']))
         conn.commit()
     finally:
         conn.close()
@@ -306,7 +302,7 @@ def index():
     f_pod         = request.args.get('f_pod','')
     f_terms       = request.args.get('f_terms','')
 
-    allowed = {'eta','etd','agreement_number','supplier','shipping_line','created_at','eta_sklad','freight_usd','record_number','container_count','delivery_terms'}
+    allowed = {'eta','etd','agreement_number','supplier','shipping_line','created_at'}
     if sort_by not in allowed: sort_by = 'eta'
     order = f"{sort_by} {'ASC' if sort_dir=='asc' else 'DESC'} NULLS LAST, created_at DESC"
 
